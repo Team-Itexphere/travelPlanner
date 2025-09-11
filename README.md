@@ -1,8 +1,17 @@
-# Welcome to your Expo app 👋
+# Travel Planner App ✈️
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A clean and modern travel planning app built with React Native and Expo.
 
-## Get started
+## Features
+
+- **Destination Search**: Plan trips to any destination worldwide
+- **Date Selection**: Choose departure and return dates
+- **Budget Planning**: Set and track your travel budget
+- **Popular Destinations**: Browse trending travel destinations
+- **Travel Tips**: Get helpful advice for your journey
+- **Quick Actions**: Access hotels, flights, car rentals, and activities
+
+## Getting Started
 
 1. Install dependencies
 
@@ -16,35 +25,44 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. Run on your preferred platform
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```bash
+   # Android
+   npx expo run:android
+   
+   # iOS
+   npx expo run:ios
+   
+   # Web
+   npx expo start --web
+   ```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## App Structure
 
-## Get a fresh project
+- **Single Screen Design**: Clean, focused interface without login requirements
+- **Modern UI**: Beautiful, intuitive design with travel-themed colors
+- **Responsive Layout**: Works perfectly on phones and tablets
+- **Location Services**: Integrated with location permissions for enhanced features
 
-When you're ready, run:
+## Technologies Used
 
-```bash
-npm run reset-project
-```
+- React Native
+- Expo
+- TypeScript
+- React Navigation (for future expansion)
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Customization
 
-## Learn more
+The app uses a clean color scheme with:
+- Primary: Travel blue (#4A90E2)
+- Secondary: Nature green (#7ED321)
+- Clean backgrounds and modern typography
 
-To learn more about developing your project with Expo, look at the following resources:
+## Future Enhancements
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Integration with travel APIs
+- Trip saving and sharing
+- Weather information
+- Currency conversion
+- Offline maps
