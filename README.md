@@ -7,6 +7,7 @@ A clean and modern travel planning app built with React Native and Expo.
 - **Destination Search**: Plan trips to any destination worldwide
 - **Date Selection**: Choose departure and return dates
 - **Budget Planning**: Set and track your travel budget
+- **Accommodation Search**: Find and select accommodations using Google Places API
 - **Popular Destinations**: Browse trending travel destinations
 - **Travel Tips**: Get helpful advice for your journey
 - **Quick Actions**: Access hotels, flights, car rentals, and activities
@@ -50,6 +51,7 @@ A clean and modern travel planning app built with React Native and Expo.
 - React Native
 - Expo
 - TypeScript
+- Google Places API
 - React Navigation (for future expansion)
 
 ## Customization
@@ -61,8 +63,9 @@ The app uses a clean color scheme with:
 
 ## Future Enhancements
 
-- Integration with travel APIs
+- Integration with additional travel APIs
 - Trip saving and sharing
 - Weather information
 - Currency conversion
 - Offline maps
+- Enhanced accommodation details and booking

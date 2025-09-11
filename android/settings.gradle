@@ -1,4 +1,4 @@
-rootProject.name = 'Ordering App'
+rootProject.name = 'Tripsntips - The Travel Planner'
 
 dependencyResolutionManagement {
   versionCatalogs {

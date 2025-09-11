@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Keyboard,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import colors from '../colors';
 import { formatLocationDisplay, getPlaceDetails, Location, searchPlaces } from '../services/locationService';
@@ -180,14 +180,20 @@ const LocationInput: React.FC<LocationInputProps> = ({
           <ScrollView 
             style={styles.suggestionsList}
             keyboardShouldPersistTaps="always"
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={true}
+            persistentScrollbar={true}
+            contentContainerStyle={{ paddingBottom: 5 }}
+            scrollEnabled={true}
+            bounces={true}
+            alwaysBounceVertical={false}
           >
             {suggestions.map((item) => (
               <TouchableOpacity
                 key={item.placeId}
                 style={styles.suggestionItem}
                 onPress={() => handleLocationSelect(item)}
+                activeOpacity={0.7}
               >
                 <Text style={styles.suggestionMainText}>{item.name}</Text>
                 <Text style={styles.suggestionSubText}>
@@ -216,6 +222,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 10,
     overflow: 'visible',
+    minHeight: 80, // Ensure minimum height for the component
   },
   label: {
     fontSize: 16,
@@ -273,7 +280,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
-    maxHeight: 240,
+    maxHeight: 200,
     zIndex: 9999,
     elevation: 16,
     shadowColor: colors.shadow,
@@ -283,15 +290,18 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    overflow: 'hidden', // Changed from 'visible' to 'hidden' to fix scrolling
   },
   suggestionsList: {
     maxHeight: 200,
-    overflow: 'hidden',
+    flexGrow: 0,
   },
   suggestionItem: {
     padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    width: '100%',
+    backgroundColor: colors.white,
   },
   suggestionMainText: {
     fontSize: 16,

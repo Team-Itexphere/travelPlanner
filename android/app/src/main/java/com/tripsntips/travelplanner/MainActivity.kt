@@ -1,4 +1,4 @@
-package com.shan969.orderingapp
+package com.tripsntips.travelplanner
 
 import android.os.Build
 import android.os.Bundle

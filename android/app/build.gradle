@@ -83,9 +83,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.shan969.orderingapp'
+    namespace 'com.tripsntips.travelplanner'
     defaultConfig {
-        applicationId 'com.shan969.orderingapp'
+        applicationId 'com.tripsntips.travelplanner'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

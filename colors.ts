@@ -12,6 +12,7 @@ const colors = {
   background: '#F8F9FA',
   border: '#E1E8ED',
   shadow: '#000000',
+  error: '#F44336',
 };
 
 export default colors;
