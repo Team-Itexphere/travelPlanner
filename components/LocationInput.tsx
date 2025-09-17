@@ -177,17 +177,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
 
       {showSuggestions && suggestions.length > 0 && (
         <View style={styles.suggestionsContainer}>
-          <ScrollView 
-            style={styles.suggestionsList}
-            keyboardShouldPersistTaps="always"
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={true}
-            persistentScrollbar={true}
-            contentContainerStyle={{ paddingBottom: 5 }}
-            scrollEnabled={true}
-            bounces={true}
-            alwaysBounceVertical={false}
-          >
+          <View style={styles.suggestionsList}>
             {suggestions.map((item) => (
               <TouchableOpacity
                 key={item.placeId}
@@ -201,7 +191,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
         </View>
       )}
 
@@ -280,7 +270,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
-    maxHeight: 200,
     zIndex: 9999,
     elevation: 16,
     shadowColor: colors.shadow,
@@ -290,11 +279,10 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    overflow: 'hidden', // Changed from 'visible' to 'hidden' to fix scrolling
+    overflow: 'visible',
   },
   suggestionsList: {
-    maxHeight: 200,
-    flexGrow: 0,
+    width: '100%',
   },
   suggestionItem: {
     padding: 15,

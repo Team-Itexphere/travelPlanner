@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   SafeAreaView,
   ScrollView,
@@ -22,6 +23,60 @@ import { cleanTripTypeName, fetchSuggestedStops, fetchTripTypes, getTripTypeIcon
 
 const { width } = Dimensions.get('window');
 
+// Custom Toast Component
+interface CustomToastProps {
+  visible: boolean;
+  message: string;
+  onDismiss: () => void;
+}
+
+const CustomToast = ({ visible, message, onDismiss }: CustomToastProps) => {
+  const opacity = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.delay(2000),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        onDismiss();
+      });
+    }
+  }, [visible, opacity, onDismiss]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.toastContainer,
+        {
+          opacity,
+          transform: [
+            {
+              translateY: opacity.interpolate({
+                inputRange: [0, 1],
+                outputRange: [20, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <Text style={styles.toastText}>{message}</Text>
+    </Animated.View>
+  );
+};
+
 const TRANSPORT_MODES = [
   { id: 'private', name: 'Private Vehicle', icon: '🚗', description: 'Your own car' },
   { id: 'rent', name: 'Rent Vehicle', icon: '🚙', description: 'Rental car or bike' },
@@ -29,11 +84,32 @@ const TRANSPORT_MODES = [
 ];
 
 
+// Loading Overlay Component
+interface LoadingOverlayProps {
+  visible: boolean;
+}
+
+const LoadingOverlay = ({ visible }: LoadingOverlayProps) => {
+  if (!visible) return null;
+  
+  return (
+    <View style={styles.loadingOverlay}>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Updating...</Text>
+      </View>
+    </View>
+  );
+};
+
 const TravelPlannerScreen = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [tripTypes, setTripTypes] = useState<TripType[]>([]);
   const [loadingTripTypes, setLoadingTripTypes] = useState(true);
   const [activeTab, setActiveTab] = useState<'map' | 'stops' | 'budget'>('map');
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
   const [tripData, setTripData] = useState({
     // Step 1: Basic Details
     startLocation: '',
@@ -42,6 +118,7 @@ const TravelPlannerScreen = () => {
     startLocationData: null as Location | null,
     endLocationData: null as Location | null,
     returnLocationData: null as Location | null,
+    additionalStops: [] as Array<{location: string, locationData: Location | null}>,
     startDate: '',
     startTime: '',
     endDate: '',
@@ -64,6 +141,7 @@ const TravelPlannerScreen = () => {
     
     // Step 5: Map & Stops
     suggestedStops: [] as any[],
+    selectedStops: [] as string[], // Track selected stops by their unique identifier
     customStops: [] as string[],
   });
 
@@ -75,13 +153,6 @@ const TravelPlannerScreen = () => {
 
   const totalSteps = 5;
 
-  // Auto switch to Suggested Stops tab when data arrives
-  useEffect(() => {
-    if (tripData.suggestedStops && (tripData.suggestedStops as any[]).length > 0) {
-      setActiveTab('stops');
-    }
-  }, [tripData.suggestedStops]);
-
   // Suggested stop type (based on travel.php data.posts)
   type SuggestedStop = {
     title: string;
@@ -89,6 +160,8 @@ const TravelPlannerScreen = () => {
     lng: number;
     entry_fees?: number;
     visit_time?: number; // hours
+    arrival_time?: string; // estimated arrival time
+    waiting_time?: number; // additional waiting time in minutes
   };
 
   // Ingest AJAX response from travel.php shape and update state
@@ -104,7 +177,14 @@ const TravelPlannerScreen = () => {
           entry_fees: p.entry_fees != null ? Number(p.entry_fees) : undefined,
           visit_time: p.visit_time != null ? Number(p.visit_time) : undefined,
         }));
+      
+      // Update the suggested stops
       updateTripData('suggestedStops', stops as any);
+      
+      // Select all suggested stops by default
+      const allStopIds = stops.map((stop, idx) => `${stop.lat}_${stop.lng}_${idx}`);
+      updateTripData('selectedStops', allStopIds);
+      
       setActiveTab('stops');
     } catch (e) {
       console.warn('Failed to apply suggested stops:', e);
@@ -125,6 +205,10 @@ const TravelPlannerScreen = () => {
       setLoadingTripTypes(true);
       const data = await fetchTripTypes();
       setTripTypes(data);
+      
+      // Select all trip types by default
+      const allTripTypeSlugs = data.map(type => type.slug);
+      updateTripData('selectedTripTypes', allTripTypeSlugs);
     } catch (error) {
       console.error('Error fetching trip types:', error);
       Alert.alert(
@@ -138,8 +222,119 @@ const TravelPlannerScreen = () => {
   };
 
   const updateTripData = (field: string, value: any) => {
+    // Show loading indicator only when updating trip types, not for location searches
+    if (field === 'selectedTripTypes') {
+      setIsUpdating(true);
+      
+      // Set a timeout to hide the loading indicator after a short delay
+      setTimeout(() => {
+        setIsUpdating(false);
+      }, 1000);
+    }
+    
     setTripData(prev => ({ ...prev, [field]: value }));
   };
+
+  // Auto switch to Suggested Stops tab when data arrives
+  useEffect(() => {
+    if (tripData.suggestedStops && (tripData.suggestedStops as any[]).length > 0) {
+      setActiveTab('stops');
+    }
+  }, [tripData.suggestedStops]);
+  
+  // Refresh map and stops tabs when any location field changes
+  useEffect(() => {
+    // Only refresh if we're on the map & stops step
+    if (currentStep === 5) {
+      // If we have both start and end locations, refresh the suggested stops
+      if (tripData.startLocationData && tripData.endLocationData) {
+        // Inline the functionality to avoid dependency issues
+        const refreshSuggestedStops = async () => {
+          try {
+            // Create path directly including additional stops
+            const start = tripData.startLocationData;
+            const end = tripData.endLocationData;
+            
+            // Ensure start and end are not null before using them
+            if (!start || !end) {
+              console.warn('Start or end location is null');
+              return;
+            }
+            
+            // Get valid additional stops (with location data)
+            const validAdditionalStops = tripData.additionalStops
+              .filter(stop => stop.locationData !== null)
+              .map(stop => stop.locationData!);
+            
+            // Generate route points including additional stops
+            const points: Array<{ lat: number; lng: number }> = [];
+            
+            if (validAdditionalStops.length === 0) {
+              // Direct path from start to end if no additional stops
+              const steps = 20;
+              for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                points.push({
+                  lat: start.latitude + (end.latitude - start.latitude) * t,
+                  lng: start.longitude + (end.longitude - start.longitude) * t,
+                });
+              }
+            } else {
+              // Create a path that includes all stops in sequence
+              const allPoints = [start, ...validAdditionalStops, end];
+              
+              // Generate path segments between each consecutive pair of points
+              for (let i = 0; i < allPoints.length - 1; i++) {
+                const segmentStart = allPoints[i];
+                const segmentEnd = allPoints[i + 1];
+                const steps = 10; // Fewer steps per segment
+                
+                for (let j = 0; j <= steps; j++) {
+                  // Skip duplicate points at segment connections (except for first segment)
+                  if (j === 0 && i > 0) continue;
+                  
+                  const t = j / steps;
+                  points.push({
+                    lat: segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * t,
+                    lng: segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * t,
+                  });
+                }
+              }
+            }
+            
+            const stops = await fetchSuggestedStops(points, tripData.selectedTripTypes);
+            updateTripData('suggestedStops', stops as any);
+            
+            // Select all suggested stops by default
+            const allStopIds = stops.map((stop, idx) => `${stop.lat}_${stop.lng}_${idx}`);
+            updateTripData('selectedStops', allStopIds);
+            
+            setActiveTab('stops');
+          } catch (e) {
+            console.warn('Suggested stops AJAX failed:', e);
+            // Reset stops on error
+            updateTripData('suggestedStops', []);
+            updateTripData('selectedStops', []);
+          }
+        };
+        
+        refreshSuggestedStops();
+      } else {
+        // Reset suggested stops when locations are incomplete
+        updateTripData('suggestedStops', []);
+        updateTripData('selectedStops', []);
+      }
+    }
+  }, [
+    tripData.startLocationData, 
+    tripData.endLocationData, 
+    tripData.returnLocationData,
+    JSON.stringify(tripData.additionalStops),
+    currentStep,
+    tripData.selectedTripTypes,
+    fetchSuggestedStops,
+    setActiveTab
+  ]);
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -208,6 +403,59 @@ const TravelPlannerScreen = () => {
         icon="🏁"
         zIndex={20}
       />
+      
+      {/* Additional Stops Section */}
+      <View style={styles.sectionContainer}>
+        <Text style={styles.sectionLabel}>Additional Stops</Text>
+        <Text style={styles.sectionSubLabel}>Add stops to change directions</Text>
+        
+        {tripData.additionalStops?.map((stop, index) => (
+          <View key={index} style={styles.additionalStopContainer}>
+            <View style={styles.additionalStopInputContainer}>
+              <LocationInput
+                label={`Stop ${index + 1}`}
+                placeholder="Enter stop location"
+                value={stop.location || ''}
+                onTextChange={(value) => {
+                  const newStops = [...(tripData.additionalStops || [])];
+                  newStops[index] = { ...newStops[index], location: value };
+                  updateTripData('additionalStops', newStops);
+                }}
+                onLocationSelect={(location) => {
+                  const newStops = [...(tripData.additionalStops || [])];
+                  newStops[index] = { 
+                    location: location.formattedAddress,
+                    locationData: location 
+                  };
+                  updateTripData('additionalStops', newStops);
+                }}
+                icon="📍"
+                zIndex={15 - index}
+              />
+            </View>
+            <TouchableOpacity 
+              style={styles.removeStopButton}
+              onPress={() => {
+                const newStops = [...(tripData.additionalStops || [])];
+                newStops.splice(index, 1);
+                updateTripData('additionalStops', newStops);
+              }}
+            >
+              <Text style={styles.removeStopButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+        
+        <TouchableOpacity 
+          style={styles.addStopButton}
+          onPress={() => {
+            const newStops = [...(tripData.additionalStops || []), { location: '', locationData: null }];
+            updateTripData('additionalStops', newStops);
+          }}
+        >
+          <Text style={styles.addStopButtonText}>+ Add Stop</Text>
+        </TouchableOpacity>
+      </View>
 
       <LocationInput
         label="Return Location"
@@ -834,12 +1082,25 @@ const TravelPlannerScreen = () => {
     const callSuggestedStopsAjax = async () => {
       try {
         if (!tripData.startLocationData || !tripData.endLocationData) return;
+        // Show loading indicator
+        setIsUpdating(true);
         const path = buildSimplePath();
         const stops = await fetchSuggestedStops(path, tripData.selectedTripTypes);
         updateTripData('suggestedStops', stops as any);
+        
+        // Select all suggested stops by default
+        const allStopIds = stops.map((stop, idx) => `${stop.lat}_${stop.lng}_${idx}`);
+        updateTripData('selectedStops', allStopIds);
+        
         setActiveTab('stops');
       } catch (e) {
         console.warn('Suggested stops AJAX failed:', e);
+        // Reset stops on error
+        updateTripData('suggestedStops', []);
+        updateTripData('selectedStops', []);
+      } finally {
+        // Hide loading indicator
+        setIsUpdating(false);
       }
     };
 
@@ -959,6 +1220,41 @@ const TravelPlannerScreen = () => {
                     />
                   )}
                   
+                  {/* Display additional stops markers */}
+                  {tripData.additionalStops.map((stop, index) => 
+                    stop.locationData && (
+                      <Marker
+                        key={`additional-stop-${index}`}
+                        coordinate={{
+                          latitude: stop.locationData.latitude,
+                          longitude: stop.locationData.longitude,
+                        }}
+                        title={`Stop ${index + 1}`}
+                        description={stop.locationData.name}
+                        pinColor="orange"
+                      />
+                    )
+                  )}
+                  
+                  {/* Display selected suggested stops */}
+                  {(tripData.suggestedStops as SuggestedStop[])
+                    .filter((stop, idx) => 
+                      tripData.selectedStops.includes(`${stop.lat}_${stop.lng}_${idx}`)
+                    )
+                    .map((stop, idx) => (
+                      <Marker
+                        key={`suggested-stop-${idx}`}
+                        coordinate={{
+                          latitude: stop.lat,
+                          longitude: stop.lng,
+                        }}
+                        title={stop.title}
+                        description={`${stop.entry_fees ? `Entry Fee: ${stop.entry_fees} LKR` : ''}`}
+                        pinColor="purple"
+                      />
+                    ))
+                  }
+                  
                   {tripData.startLocationData && tripData.endLocationData && (
                     <MapViewDirections
                       origin={{
@@ -969,11 +1265,25 @@ const TravelPlannerScreen = () => {
                         latitude: tripData.endLocationData.latitude,
                         longitude: tripData.endLocationData.longitude,
                       }}
-                      waypoints={((tripData.suggestedStops as any[]) || []).map((stop: any) => ({
-                        latitude: stop.lat,
-                        longitude: stop.lng,
-                      }))}
-                      apikey={"AIzaSyC9fL-PtseTc-6aGNWmtUo-Sg21cNrnKzI"}
+                      waypoints={[
+                        // Include additional stops
+                        ...tripData.additionalStops
+                          .filter(stop => stop.locationData)
+                          .map(stop => ({
+                            latitude: stop.locationData!.latitude,
+                            longitude: stop.locationData!.longitude,
+                          })),
+                        // Include selected suggested stops
+                        ...(tripData.suggestedStops as SuggestedStop[])
+                          .filter((stop, idx) => 
+                            tripData.selectedStops.includes(`${stop.lat}_${stop.lng}_${idx}`)
+                          )
+                          .map(stop => ({
+                            latitude: stop.lat,
+                            longitude: stop.lng,
+                          }))
+                      ]}
+                      apikey={"AIzaSyCUDHA3khY63dx8k-1jhJITCWfQSRXKBU0"}
                       strokeWidth={4}
                       strokeColor={colors.primary}
                       optimizeWaypoints={true}
@@ -1041,21 +1351,82 @@ const TravelPlannerScreen = () => {
                     {(tripData.suggestedStops as any[]).length === 0 ? (
                       <Text style={styles.infoText}>No suggestions yet.</Text>
                     ) : (
-                      (tripData.suggestedStops as SuggestedStop[]).map((stop, idx) => (
-                        <View key={`${stop.lat}_${stop.lng}_${idx}`} style={styles.stopItem}>
-                          <Text style={styles.stopIcon}>📍</Text>
-                          <View style={styles.stopDetails}>
-                            <Text style={styles.stopName}>{stop.title}</Text>
-                            <Text style={styles.stopDesc}>
-                              {stop.entry_fees != null ? `Entry Fee: ${stop.entry_fees} LKR • ` : ''}
-                              {stop.visit_time != null ? `Visit Time: ${stop.visit_time} h` : ''}
-                            </Text>
+                      (tripData.suggestedStops as SuggestedStop[]).map((stop, idx) => {
+                        const stopId = `${stop.lat}_${stop.lng}_${idx}`;
+                        const isSelected = tripData.selectedStops.includes(stopId);
+                        
+                        return (
+                          <View key={stopId} style={styles.stopItem}>
+                            <Text style={styles.stopIcon}>📍</Text>
+                            <View style={styles.stopDetails}>
+                              <Text style={styles.stopName}>{stop.title ? stop.title.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec)).replace(/&rsquo;|&#8217;/g, "'").replace(/&hellip;|&#8230;/g, "...") : ""}</Text>
+                              <View style={styles.stopInfoRow}>
+                                {stop.arrival_time && (
+                                  <View style={styles.arrivalTimeContainer}>
+                                    <Text style={styles.arrivalTimeLabel}>Arrival:</Text>
+                                    <Text style={styles.arrivalTimeValue}>{stop.arrival_time}</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <Text style={styles.stopDesc}>
+                                {stop.entry_fees != null ? `Entry Fee: ${stop.entry_fees} LKR • ` : ''}
+                                {stop.visit_time != null ? `Visit Time: ${stop.visit_time} h` : ''}
+                              </Text>
+                              <View style={styles.stopInfoRow}>
+                                <View style={styles.waitingTimeContainer}>
+                                  <Text style={styles.waitingTimeLabel}>Wait more:</Text>
+                                  <View style={styles.waitingTimeControls}>
+                                    <TouchableOpacity 
+                                      style={styles.waitingTimeButton}
+                                      onPress={() => {
+                                        const currentWaitingTime = stop.waiting_time || 0;
+                                        if (currentWaitingTime > 0) {
+                                          const updatedStops = [...(tripData.suggestedStops as SuggestedStop[])];
+                                          updatedStops[idx] = {
+                                            ...stop,
+                                            waiting_time: currentWaitingTime - 15
+                                          };
+                                          updateTripData('suggestedStops', updatedStops);
+                                        }
+                                      }}
+                                    >
+                                      <Text style={styles.waitingTimeButtonText}>-</Text>
+                                    </TouchableOpacity>
+                                    <Text style={styles.waitingTimeValue}>{stop.waiting_time || 0} min</Text>
+                                    <TouchableOpacity 
+                                      style={styles.waitingTimeButton}
+                                      onPress={() => {
+                                        const currentWaitingTime = stop.waiting_time || 0;
+                                        if (currentWaitingTime < 120) {
+                                          const updatedStops = [...(tripData.suggestedStops as SuggestedStop[])];
+                                          updatedStops[idx] = {
+                                            ...stop,
+                                            waiting_time: currentWaitingTime + 15
+                                          };
+                                          updateTripData('suggestedStops', updatedStops);
+                                        }
+                                      }}
+                                    >
+                                      <Text style={styles.waitingTimeButtonText}>+</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              </View>
+                            </View>
+                            <TouchableOpacity 
+                              style={[styles.stopCheckbox, isSelected && styles.stopCheckboxSelected]} 
+                              onPress={() => {
+                                const updatedSelectedStops = isSelected
+                                  ? tripData.selectedStops.filter(id => id !== stopId)
+                                  : [...tripData.selectedStops, stopId];
+                                updateTripData('selectedStops', updatedSelectedStops);
+                              }}
+                            >
+                              <Text style={styles.stopCheckboxText}>{isSelected ? '✓' : ''}</Text>
+                            </TouchableOpacity>
                           </View>
-                          <TouchableOpacity style={styles.stopCheckbox}>
-                            <Text style={styles.stopCheckboxText}>✓</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ))
+                        );
+                      })
                     )}
                   </ScrollView>
                 </View>
@@ -1111,7 +1482,8 @@ const TravelPlannerScreen = () => {
     }
     
     if (currentStep === totalSteps) {
-      Alert.alert('Trip Planned!', 'Your travel plan has been generated successfully!');
+      setToastMessage('Trip plan updated');
+      setToastVisible(true);
       return;
     }
     nextStep();
@@ -1123,6 +1495,12 @@ const TravelPlannerScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <CustomToast 
+        visible={toastVisible} 
+        message={toastMessage} 
+        onDismiss={() => setToastVisible(false)} 
+      />
+      <LoadingOverlay visible={isUpdating} />
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       
       {/* Header */}
@@ -1154,11 +1532,126 @@ const TravelPlannerScreen = () => {
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
+  stopInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 10,
+  },
+  arrivalTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  arrivalTimeLabel: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  arrivalTimeValue: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  waitingTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  waitingTimeControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  waitingTimeButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waitingTimeButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: 'bold',
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  waitingTimeLabel: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  waitingTimeValue: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  sectionContainer: {
+    marginBottom: 15,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  sectionSubLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 10,
+  },
+  additionalStopContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    width: '100%',
+  },
+  additionalStopInputContainer: {
+    flex: 1,
+  },
+  removeStopButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ff5252',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+    paddingBottom: 3
+  },
+  removeStopButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  addStopButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  addStopButtonText: {
+    color: '#305387',
+    fontWeight: 'bold',
   },
   budgetContainer: {
     backgroundColor: colors.white,
@@ -1559,7 +2052,7 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: 5,
     alignItems: 'center',
   },
   tabActive: {
@@ -1575,8 +2068,8 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   tabContent: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: 15,
+    paddingBottom: 15,
   },
   mapPlaceholder: {
     height: 200,
@@ -1652,9 +2145,14 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  stopCheckboxSelected: {
+    backgroundColor: colors.primary,
   },
   stopCheckboxText: {
     color: colors.white,
@@ -1692,16 +2190,6 @@ const styles = StyleSheet.create({
   navButtonTextPrimary: {
     color: colors.white,
   },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
   mapContainer: {
     height: 300,
     borderRadius: 12,
@@ -1733,6 +2221,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    zIndex: 9999,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    alignItems: 'center',
+  },
+  toastText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: 'bold',
   },
 });
 
